@@ -1,0 +1,147 @@
+# pastebin-author-bff — Serverless Framework v4
+#
+# Authoring API for the pastebin system (POST /pastes, GET /me/pastes).
+# Cognito JWT-protected HTTP API + 3 rest functions + 1 trigger lambda.
+#
+# Architecture (see ../design-research.md §4 and §6):
+#   rest (3 routes) — POST /pastes, GET /me/pastes, GET /health
+#   trigger — consumes DDB stream on PastesTable, emits PasteCreated /
+#             PasteDeleted to the bus. This is the SOLE producer of those
+#             events.
+#
+#   The createPaste handler does NOT call PutEvents directly — the DDB
+#   stream + trigger is the single source of truth, so that downstream
+#   consumers (pastebin-public-bff listener) get exactly one event per
+#   write even on retries. Direct emit from the handler would double-fan-
+#   out and corrupt the lean materialized view in public-bff.
+#
+#   Why a trigger and not direct emit:
+#     - public-bff now subscribes to PasteCreated to materialize its own
+#       lean view (single-row GetItem by pasteId). See design §6.
+#     - The trigger keeps the write path responsive: if the bus is
+#       degraded, the DDB write still succeeds and the trigger backfills
+#       when the bus recovers (DDB stream is durable, ordered per shard).
+#     - Failed-after-write compensations (rare) emit a MODIFY/REMOVE on
+#       the stream, giving downstream consumers the full audit trail.
+#
+#   NO listener leg on this stack: author-bff has no consumer of its own
+#   events. The sole listener is in pastebin-public-bff.
+#
+# Deploy order: pastebin-event-hub first, then this stack.
+#   sls deploy --stage dev --region ap-southeast-1
+#
+# Stack outputs: UserPoolId, UserPoolClientId, PastesTableName,
+# PastesTableArn, PastesTableStreamArn, ContentBucketName,
+# ContentBucketArn, ApiEndpoint.
+
+service: ${self:custom.subsys}-author-bff
+
+frameworkVersion: ^4
+
+provider:
+  name: aws
+  runtime: nodejs20.x
+  region: ap-southeast-1
+  stage: ${opt:stage, 'dev'}
+  endpointType: REGIONAL
+  logRetentionInDays: ${opt:logRetentionInDays, 3}
+  environment: ${file(serverless/config.yml):environment}
+  iam:
+    role: ${file(serverless/iam.yml):role}
+  httpApi:
+    cors: true
+    metrics: true
+    authorizers:
+      cognitoJwtAuthorizer:
+        type: jwt
+        identitySource: '$request.header.Authorization'
+        issuerUrl:
+          Fn::Sub: 'https://cognito-idp.${AWS::Region}.amazonaws.com/${CognitoUserPool}'
+        audience:
+          - Ref: UserPoolClient
+
+params: ${file(serverless/config.yml):params}
+custom: ${file(serverless/config.yml):custom}
+
+build:
+  esbuild:
+    bundle: true
+    minify: false
+    target: 'node20'
+    sourcemap:
+      type: linked
+      setNodeOptions: true
+    external:
+      - '@aws-sdk/*'
+
+package:
+  individually: true
+  patterns:
+    - '!node_modules/**'
+    - '!src/**'
+    - '!.git/**'
+
+functions:
+  # POST /pastes — create a new paste. Cognito JWT required.
+  # Body: { content: string, contentType?: string, expiresAt?: ISO-8601 }
+  # 201: { pasteId, url, contentType, sizeBytes, createdAt, expiresAt? }
+  # Rejects `alias` / `custom_alias` body fields with 400 (design §3).
+  createPaste:
+    handler: src/rest/handlers.createPaste
+    memorySize: 256
+    timeout: 15
+    events:
+      - httpApi:
+          path: /pastes
+          method: post
+          authorizer: cognitoJwtAuthorizer
+    environment: ${file(serverless/config.yml):restEnvironment}
+
+  # GET /me/pastes — list the caller's pastes via GSI1. Cognito JWT required.
+  # 200: { count, items: PasteSummary[] }
+  listMyPastes:
+    handler: src/rest/handlers.listMyPastes
+    memorySize: 256
+    timeout: 15
+    events:
+      - httpApi:
+          path: /me/pastes
+          method: get
+          authorizer: cognitoJwtAuthorizer
+    environment: ${file(serverless/config.yml):restEnvironment}
+
+  # GET /health — public health check. NO authorizer.
+  health:
+    handler: src/rest/handlers.health
+    memorySize: 128
+    timeout: 5
+    events:
+      - httpApi:
+          path: /health
+          method: get
+    environment: ${file(serverless/config.yml):restEnvironment}
+
+  # Trigger leg — consumes DDB stream on PastesTable, emits PasteCreated
+  # (INSERT) and PasteDeleted (REMOVE) to the bus. Sole producer of those
+  # events. MODIFY events are also observed for full audit but currently
+  # not re-emitted (we don't update pastes at MVP).
+  # Wired via PastesTableEventSourceMapping in resources.yml.
+  trigger:
+    handler: src/trigger.handle
+    memorySize: 256
+    timeout: 60
+    events:
+      - stream:
+          type: dynamodb
+          arn:
+            Fn::GetAtt: [PastesTable, StreamArn]
+          filterPatterns:
+            - eventName: [INSERT]
+            - eventName: [REMOVE]
+          startingPosition: TRIM_HORIZON
+          functionResponseType: ReportBatchItemFailures
+    environment: ${file(serverless/config.yml):triggerEnvironment}
+
+resources:
+  - ${file(serverless/resources.yml):resources}
+  - ${file(serverless/s3.yml):resources}

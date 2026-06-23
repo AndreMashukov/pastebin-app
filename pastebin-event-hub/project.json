@@ -1,0 +1,38 @@
+{
+  "name": "pastebin-event-hub",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "pastebin-event-hub/serverless",
+  "projectType": "application",
+  "tags": ["type:app", "scope:pastebin", "role:event-hub"],
+  "implicitDependencies": [],
+  "targets": {
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc --noEmit -p tsconfig.json",
+        "cwd": "pastebin-event-hub"
+      }
+    },
+    "package": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "serverless package --stage ${NX_STAGE:-dev} --region ${NX_REGION:-ap-southeast-1}",
+        "cwd": "pastebin-event-hub"
+      }
+    },
+    "deploy": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "serverless deploy --stage ${NX_STAGE:-dev} --region ${NX_REGION:-ap-southeast-1}",
+        "cwd": "pastebin-event-hub"
+      }
+    },
+    "info": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "serverless info --stage ${NX_STAGE:-dev} --region ${NX_REGION:-ap-southeast-1}",
+        "cwd": "pastebin-event-hub"
+      }
+    }
+  }
+}

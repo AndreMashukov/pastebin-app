@@ -1,0 +1,10 @@
+# The schedule EventBridge rule and the Lambda invoke permission
+# are auto-wired by Serverless v4 from the `events: - schedule:`
+# declaration in serverless.yml. No custom resources needed.
+#
+# (We keep this file as a no-op so serverless.yml's
+# `resources: ${file(serverless/resources.yml):resources}` still
+# resolves. If we add a DLQ or a dead-letter alarm in future, it
+# will land here.)
+resources:
+  Resources: {}

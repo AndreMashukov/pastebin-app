@@ -1,0 +1,36 @@
+{
+  "name": "pastebin-public-bff",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "pastebin-public-bff/src",
+  "projectType": "application",
+  "targets": {
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc --noEmit -p tsconfig.json",
+        "cwd": "pastebin-public-bff"
+      }
+    },
+    "package": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "serverless package --stage ${NX_STAGE:-dev} --region ${NX_REGION:-ap-southeast-1}",
+        "cwd": "pastebin-public-bff"
+      }
+    },
+    "info": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "serverless info --stage ${NX_STAGE:-dev} --region ${NX_REGION:-ap-southeast-1}",
+        "cwd": "pastebin-public-bff"
+      }
+    },
+    "deploy": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "serverless deploy --stage ${NX_STAGE:-dev} --region ${NX_REGION:-ap-southeast-1}",
+        "cwd": "pastebin-public-bff"
+      }
+    }
+  }
+}

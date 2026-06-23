@@ -1,0 +1,17 @@
+# IAM for cross-stack DynamoDB DeleteItem on author-bff's
+# PastesTable. Separate file from dynamodb.yml so each
+# iamRoleStatements is a single statement object (matches the
+# public-bff convention where each source file contributes one
+# statement to the aggregated array).
+#
+# When the reaper DeleteItems a row, the DDB stream fires REMOVE,
+# author-bff's trigger reads the CDC record and puts PasteDeleted
+# on the bus, and public-bff's listener cleans up its lean
+# ReadsTable row. The reaper never publishes to the bus directly.
+
+iamRoleStatements:
+  Effect: Allow
+  Action:
+    - dynamodb:DeleteItem
+  Resource:
+    - ${self:custom.pastesTableArn}

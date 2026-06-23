@@ -1,0 +1,40 @@
+# pastebin-event-hub
+#
+# Forked from jgilbert01/templates/template-event-hub. The bus is the
+# spine of the pastebin system: author-bff, public-bff, and reaper
+# all publish to it and consume from it. This stack creates only the
+# bus + archive. No business logic.
+#
+# Naming follows the convention from the simple-bff template:
+#   service = ${self:custom.subsys}-${self:custom.role}
+#   Stack   = <service>-<stage>        e.g. pastebin-event-hub-dev
+#   Bus     = <service>-<stage>-bus    e.g. pastebin-event-hub-dev-bus
+#
+# Cross-stack consumers reference the bus via:
+#   ${cf:pastebin-event-hub-${opt:stage}.busName}
+#
+# To deploy:
+#   yarn deploy:event-hub
+
+service: ${self:custom.subsys}-${self:custom.role}
+
+frameworkVersion: ^4
+
+provider:
+  name: aws
+  stage: ${opt:stage, 'dev'}
+  region: ${opt:region, 'ap-southeast-1'}
+  logRetentionInDays: ${opt:logRetentionInDays, 3}
+  stackTags: ${file(serverless/tags.yml)}
+
+custom: ${file(serverless/config.yml):custom}
+
+resources:
+  # The bus itself. The archive in archive.yml captures every event
+  # EXCEPT faults (book Ch. 4: 'Systemwide Event Sourcing').
+  - ${file(serverless/bus.yml):resources}
+  - ${file(serverless/archive.yml):resources}
+
+# No functions, no events. The event-hub is a pure-infrastructure
+# stack. It owns no business logic and is read by every other
+# service in the system.

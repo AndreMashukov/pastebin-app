@@ -1,0 +1,74 @@
+# Content bucket for pastebin paste bodies (design §4).
+#
+# All paste bodies live here as s3://<bucket>/pastes/<pasteId>. The
+# createPaste handler does PutObject; the reaper does DeleteObject. The
+# public-bff does GetObject (cross-stack, read-only IAM on its side).
+#
+# No NotificationConfiguration — the source of truth for "paste events"
+# is the DDB stream on PastesTable, NOT S3 events. This avoids the
+# double-emit problem (handler PutObject + S3 notification) and keeps
+# CDC on a single durable ordered log.
+#
+# Versioning is enabled so a PutObject that races with the reaper's
+# DeleteObject doesn't leave the object in a lost state.
+#
+# Lifecycle rule: IA transition at 30 days, expire at 365 days. Acts as
+# a backstop in case the reaper is broken or out of service for an
+# extended period (design §5). The reaper is the primary expiry path.
+
+iamRoleStatements:
+  Effect: Allow
+  Action:
+    - s3:PutObject
+    - s3:GetObject
+    - s3:DeleteObject
+  Resource:
+    - Fn::GetAtt: [ ContentBucket, Arn ]
+    - Fn::Join:
+        - '/'
+        - - Fn::GetAtt: [ ContentBucket, Arn ]
+          - '*'
+
+resources:
+  Resources:
+    ContentBucket:
+      Type: AWS::S3::Bucket
+      DeletionPolicy: Retain
+      UpdateReplacePolicy: Retain
+      Properties:
+        BucketName: ${self:service}-${opt:stage}-content
+        BucketEncryption:
+          ServerSideEncryptionConfiguration:
+            - ServerSideEncryptionByDefault:
+                SSEAlgorithm: AES256
+        VersioningConfiguration:
+          Status: Enabled
+        PublicAccessBlockConfiguration:
+          BlockPublicAcls: true
+          BlockPublicPolicy: true
+          IgnorePublicAcls: true
+          RestrictPublicBuckets: true
+        CorsConfiguration:
+          CorsRules:
+            - AllowedOrigins: ['*']
+              AllowedHeaders: ['*']
+              AllowedMethods: [GET]
+        LifecycleConfiguration:
+          Rules:
+            - Id: expire-orphans-backstop
+              Status: Enabled
+              # Backstop only. The reaper is the primary S3 cleanup path
+              # (design §5). After 365 days anything still in the bucket
+              # is a true orphan and can be hard-deleted.
+              ExpirationInDays: 365
+              Transitions:
+                - StorageClass: STANDARD_IA
+                  TransitionInDays: 30
+
+  Outputs:
+    ContentBucketName:
+      Value:
+        Ref: ContentBucket
+    ContentBucketArn:
+      Value:
+        Fn::GetAtt: [ContentBucket, Arn]

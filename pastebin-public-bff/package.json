@@ -1,0 +1,18 @@
+{
+  "name": "pastebin-public-bff",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Pastebin public read API (GET /p/{pasteId}). Anonymous HTTP API that resolves pasteId to content + metadata via a lean DDB view materialized from bus events. Consumes PasteCreated/PasteDeleted from the bus and reads the body from author-bff's content bucket (cross-stack).",
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.145",
+    "@types/node": "^20.12.7",
+    "esbuild": "^0.21.5",
+    "serverless": "^4.0.0",
+    "typescript": "^5.4.0"
+  },
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.600.0",
+    "@aws-sdk/client-s3": "^3.600.0",
+    "@aws-sdk/lib-dynamodb": "^3.600.0"
+  }
+}

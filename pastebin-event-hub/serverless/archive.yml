@@ -1,0 +1,27 @@
+resources:
+  Resources:
+    # Archive every event on the bus EXCEPT faults. This gives us a
+    # full event-sourced record of every domain event in the system
+    # for replay, debugging, and future batch analytics. Book Ch. 4:
+    # 'Systemwide Event Sourcing'.
+    Archive:
+      Type: AWS::Events::Archive
+      Properties:
+        ArchiveName: ${self:service}-${opt:stage}-archive
+        # Uncomment to set retention; default is infinite (retained as
+        # long as the archive exists).
+        # RetentionDays: 365
+        SourceArn:
+          Fn::GetAtt: [Bus, Arn]
+        EventPattern:
+          detail:
+            type:
+              - anything-but: fault
+
+  Outputs:
+    archiveName:
+      Value:
+        Ref: Archive
+    archiveArn:
+      Value:
+        Fn::GetAtt: [Archive, Arn]

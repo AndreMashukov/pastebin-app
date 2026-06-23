@@ -1,0 +1,20 @@
+{
+  "name": "pastebin-author-bff",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Pastebin authoring API (POST /pastes, GET /me/pastes). Writes to the pastes table + S3 content bucket; emits PasteCreated / PasteDeleted on the bus via the DDB stream trigger.",
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.145",
+    "@types/node": "^20.12.7",
+    "esbuild": "^0.21.5",
+    "serverless": "^4.0.0",
+    "typescript": "^5.4.0"
+  },
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.600.0",
+    "@aws-sdk/client-eventbridge": "^3.600.0",
+    "@aws-sdk/client-s3": "^3.600.0",
+    "@aws-sdk/lib-dynamodb": "^3.600.0",
+    "@aws-sdk/util-dynamodb": "^3.600.0"
+  }
+}

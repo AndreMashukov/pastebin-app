@@ -1,0 +1,5 @@
+role:
+  statements:
+    - ${file(serverless/dynamodb.yml):iamRoleStatements}
+    - ${file(serverless/dynamodb-delete.yml):iamRoleStatements}
+    - ${file(serverless/s3.yml):iamRoleStatements}

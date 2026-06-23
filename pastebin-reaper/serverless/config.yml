@@ -1,0 +1,46 @@
+# pastebin-reaper cross-stack wiring. All references go through
+# ${cf:..., 'fallback'} so a stand-alone package (no deploys in the
+# other stacks) still produces a valid CFN template -- Serverless v4
+# resolves the real values at deploy time.
+
+subsys: pastebin
+
+params:
+  stage:
+    default: dev
+  region:
+    default: ap-southeast-1
+  logRetentionInDays:
+    default: 3
+
+custom:
+  partition: aws
+  subsys: pastebin
+  # Cross-stack: author-bff
+  pastesTableName: ${cf:pastebin-author-bff-${opt:stage}.PastesTableName, 'pastebin-author-bff-${opt:stage}-pastes'}
+  pastesTableArn: ${cf:pastebin-author-bff-${opt:stage}.PastesTableArn, 'arn:${self:custom.partition}:dynamodb:${opt:region}:${aws:accountId}:table/pastebin-author-bff-${opt:stage}-pastes'}
+  # Author-bff doesn't export a GSI2 ARN. The GSI ARN is deterministically
+  # `<table-arn>/index/<gsi-name>`, so we append it locally. The single-quoted
+  # outer wrapper keeps the `/index/gsi2` suffix as a literal string
+  # (no Serverless variable resolution in the suffix).
+  pastesTableGsi2Arn: "${cf:pastebin-author-bff-${opt:stage}.PastesTableArn, 'arn:${self:custom.partition}:dynamodb:${opt:region}:${aws:accountId}:table/pastebin-author-bff-${opt:stage}-pastes'}/index/gsi2"
+  contentBucketName: ${cf:pastebin-author-bff-${opt:stage}.ContentBucketName, 'pastebin-author-bff-${opt:stage}-content'}
+  contentBucketArn: ${cf:pastebin-author-bff-${opt:stage}.ContentBucketArn, 'arn:${self:custom.partition}:s3:::pastebin-author-bff-${opt:stage}-content'}
+
+environment:
+  AWS_NODEJS_CONNECTION_REUSE_ENABLED: "1"
+  LOG_LEVEL: info
+  SERVICE_NAME: pastebin-reaper
+  # Wired from custom.* so the handler can use them in code without
+  # dereferencing ${cf:...} at runtime.
+  PASTES_TABLE_NAME: ${self:custom.pastesTableName}
+  CONTENT_BUCKET_NAME: ${self:custom.contentBucketName}
+  GSI2_NAME: gsi2
+
+reaperEnvironment:
+  AWS_NODEJS_CONNECTION_REUSE_ENABLED: "1"
+  LOG_LEVEL: info
+  SERVICE_NAME: pastebin-reaper
+  PASTES_TABLE_NAME: ${self:custom.pastesTableName}
+  CONTENT_BUCKET_NAME: ${self:custom.contentBucketName}
+  GSI2_NAME: gsi2
