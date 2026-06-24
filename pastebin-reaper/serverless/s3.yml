@@ -1,0 +1,17 @@
+# IAM for cross-stack S3 DeleteObject on author-bff's content bucket.
+# The reaper owns the body lifecycle; author-bff owns the bucket.
+# Scoped to the pastes/* prefix to match the convention used in
+# author-bff's s3.yml (the IAM policy on the public-bff's read side
+# uses the same prefix).
+#
+# Cross-stack via ${cf:...} placeholders resolved at deploy time.
+
+iamRoleStatements:
+  Effect: Allow
+  Action:
+    - s3:DeleteObject
+  Resource:
+    - Fn::Join:
+        - '/'
+        - - ${self:custom.contentBucketArn}
+          - 'pastes/*'

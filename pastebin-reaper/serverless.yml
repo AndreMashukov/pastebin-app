@@ -1,0 +1,83 @@
+# pastebin-reaper -- Serverless Framework v4
+#
+# Scheduled reaper for expired pastes. Sweeps GSI2 of author-bff's
+# PastesTable on a cron, deletes S3 content + DDB row for each
+# expired paste, and lets the existing DDB-stream CDC pipeline emit
+# PasteDeleted to the bus (no bus publish from this stack).
+#
+# Architecture (event-sourced CQRS invariant):
+#   DDB stream is the SOLE producer of PasteDeleted events.
+#   This stack does NOT publish to the bus.
+#   When the reaper DeleteItems a row, the DDB stream fires REMOVE,
+#   author-bff's trigger reads the CDC record and puts a PasteDeleted
+#   event on the bus, and public-bff's listener cleans up its lean
+#   view. Transitively, the reaper triggers a PasteDeleted without
+#   ever calling PutEvents itself.
+#
+# Why no API surface: this stack is invoked only by an EventBridge
+# schedule rule. No HTTP API, no JWT, no authorizer.
+#
+# Deploy order:
+#   1) pastebin-event-hub
+#   2) pastebin-author-bff
+#   3) pastebin-public-bff
+#   4) pastebin-reaper (this stack)
+
+service: ${self:custom.subsys}-reaper
+
+frameworkVersion: ^4
+
+provider:
+  name: aws
+  runtime: nodejs20.x
+  region: ap-southeast-1
+  stage: ${opt:stage, 'dev'}
+  endpointType: REGIONAL
+  logRetentionInDays: ${opt:logRetentionInDays, 3}
+  environment: ${file(serverless/config.yml):environment}
+  iam:
+    role: ${file(serverless/iam.yml):role}
+
+params: ${file(serverless/config.yml):params}
+custom: ${file(serverless/config.yml):custom}
+
+build:
+  esbuild:
+    bundle: true
+    minify: false
+    target: 'node20'
+    sourcemap:
+      type: linked
+      setNodeOptions: true
+    external:
+      - '@aws-sdk/*'
+
+package:
+  individually: true
+  patterns:
+    - '!node_modules/**'
+    - '!src/**'
+    - '!.git/**'
+
+functions:
+  # Scheduled reaper. Invoked by an EventBridge schedule rule
+  # (rate(5 minutes)). Scans GSI2 for expired pastes, deletes S3
+  # body + DDB row, lets the CDC pipeline emit PasteDeleted
+  # transitively.
+  #
+  # The `schedule` event type is auto-wired by Serverless v4: it
+  # creates the EventBridge rule, the Lambda permission, and the
+  # IAM role grant for events.amazonaws.com to invoke the function.
+  # No custom CFN needed.
+  reap:
+    handler: src/handler.reap
+    memorySize: 256
+    timeout: 900   # 15 min upper bound on items processed per cycle
+    events:
+      - schedule:
+          name: ${self:service}-${opt:stage}-reap
+          description: Sweep expired pastes (GSI2 of author-bff PastesTable), delete S3 body and DDB row.
+          rate: rate(5 minutes)
+          enabled: true
+
+resources: ${file(serverless/resources.yml):resources}

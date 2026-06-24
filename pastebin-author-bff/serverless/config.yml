@@ -1,0 +1,40 @@
+params:
+  default:
+    logRetentionInDays: 3
+  prd:
+    logRetentionInDays: 30
+
+custom:
+  partition: aws
+  org: mashukov
+  subsys: pastebin
+  # Cross-stack ref to event-hub (deployed first). Only the busName is
+  # needed by the trigger lambda for PutEvents. The handler does NOT
+  # emit directly (single producer = trigger).
+  #
+  # The fallback strings let `sls package` run before event-hub is
+  # deployed (L2 build verification). At deploy time Serverless
+  # re-resolves the cross-stack var; if the upstream stack is
+  # missing, deploy fails loudly with a clear "Cannot resolve
+  # ${cf:...}" error rather than a CFN synthesize error.
+  busName: ${cf:pastebin-event-hub-${opt:stage}.busName, 'pastebin-event-hub-${opt:stage}-bus'}
+  busArn: ${cf:pastebin-event-hub-${opt:stage}.busArn, 'arn:${self:custom.partition}:events:${opt:region}:${aws:accountId}:event-bus/pastebin-event-hub-${opt:stage}-bus'}
+  # Cognito is defined in this stack; the JWT authorizer in serverless.yml
+  # references it via Fn::GetAtt (no ${cf:} — that's only for cross-stack).
+
+environment:
+  SERVICE: ${self:service}
+  STAGE: ${opt:stage}
+  AWS_NODEJS_CONNECTION_REUSE_ENABLED: 1
+
+restEnvironment:
+  TABLE_NAME: ${self:service}-${opt:stage}-pastes
+  BUCKET: ${self:service}-${opt:stage}-content
+  # The createPaste handler does NOT call PutEvents directly. The DDB
+  # stream + trigger lambda is the SOLE producer of PasteCreated.
+  DOMAIN: paste.example.com   # placeholder; custom domain is post-MVP
+
+triggerEnvironment:
+  TABLE_NAME: ${self:service}-${opt:stage}-pastes
+  BUS_NAME: ${self:custom.busName}
+  BUS_ARN: ${self:custom.busArn}

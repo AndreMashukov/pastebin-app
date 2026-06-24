@@ -1,0 +1,39 @@
+# Pastes table (Single-Table Design — design §4):
+#   pk         = "PASTE#<pasteId>"  (HASH)
+#   sk         = "META"             (RANGE)
+#   ownerSub   = <cognito sub>      (GSI1 HASH key)
+#   gsisk      = "<expiresAt>#<pasteId>"   (GSI1 RANGE key — newest-first)
+#   gsi2pk     = "EXPIRE"           (GSI2 HASH key — sparse)
+#   gsi2sk     = "<expiresAt>#<pasteId>"   (GSI2 RANGE key)
+#
+# GSI1 enables GET /me/pastes: query by ownerSub, sorted by expiresAt desc
+# (so expired items cluster at the bottom).
+# GSI2 is sparse — only rows with expiresAt set get a value. The reaper
+# queries gsi2pk = "EXPIRE" AND gsi2sk < :now and deletes the rows.
+#
+# DDB stream (NEW_AND_OLD_IMAGES) feeds the trigger lambda, which is
+# the SOLE producer of PasteCreated / PasteDeleted events on the bus.
+#
+# TTL on expires_at is a backstop: AWS removes the metadata within 48h
+# of expiry, but only metadata — the reaper is the primary S3 cleanup
+# path. Pastes without expires_at are never TTL-deleted (no value).
+
+tableArn:
+  Fn::GetAtt: [ PastesTable, Arn ]
+tableStreamArn:
+  Fn::GetAtt: [ PastesTable, StreamArn ]
+
+iamRoleStatements:
+  Effect: Allow
+  Action:
+    - dynamodb:Query
+    - dynamodb:GetItem
+    - dynamodb:PutItem
+    - dynamodb:DeleteItem
+  Resource:
+    - Fn::GetAtt: [ PastesTable, Arn ]
+    - Fn::Join:
+        - '/'
+        - - Fn::GetAtt: [ PastesTable, Arn ]
+          - index
+          - '*'

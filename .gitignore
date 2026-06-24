@@ -1,0 +1,44 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build output
+dist/
+build/
+/lib/
+.serverless/
+*.tsbuildinfo
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# NX
+.nx/cache
+.nx/workspace-data
+.nx/workspace.json
+
+# Env
+.env
+.env.*
+!.env.example
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Tests
+coverage/
+.nyc_output/
+
+# Serverless framework
+.serverless/
+# CloudFormation change sets etc.
+cfn-output.json

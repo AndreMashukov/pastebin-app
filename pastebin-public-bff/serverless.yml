@@ -1,0 +1,128 @@
+# pastebin-public-bff — Serverless Framework v4
+# Public read path for the Pastebin service. Anonymous HTTP API that
+# resolves pasteId to content + metadata via a lean DDB view
+# materialized from the bus. No authorizer.
+#
+# Architecture (event-sourced CQRS):
+#   rest  — GET /p/{pasteId}, GET /p/{pasteId}/meta, GET /health
+#           (no JWT, public, CloudFront-fronted in production)
+#   listener — consumes PasteCreated/PasteDeleted from bus ->
+#              ReadsListenerQueue and upserts/deletes the lean
+#              ReadsTable. This is the ONLY consumer of these events
+#              today.
+#
+# Why a lean view (not cross-stack reads on author-bff's PastesTable):
+#   design §1: read-heavy (10:1 read:write). A single GetItem on a
+#   tight table is sub-millisecond. The lean view decouples read
+#   scale from author-bff's write scale and avoids forcing author-bff
+#   to provision for public read volume.
+#
+# Why S3 GetObject cross-stack instead of DDB-streamed body:
+#   author-bff writes the body to S3 (256 KB max) and the metadata
+#   to DDB. The body is not on the bus (bus detail is metadata only,
+#   see author-bff's trigger.ts buildEntry). Public-bff reads the
+#   body from the same bucket author-bff wrote to, via cross-stack
+#   CFN output + scoped GetObject IAM. This keeps the bus events
+#   small and the body on the most appropriate storage tier.
+#
+# Deploy order:
+#   1) pastebin-event-hub
+#   2) pastebin-author-bff
+#   3) pastebin-public-bff (this stack)
+#
+# Stack outputs: ReadsTableName, ReadsTableArn, ContentBucketName,
+# ContentBucketArn, ApiEndpoint, ListenerQueueUrl.
+
+service: ${self:custom.subsys}-public-bff
+
+frameworkVersion: ^4
+
+provider:
+  name: aws
+  runtime: nodejs20.x
+  region: ap-southeast-1
+  stage: ${opt:stage, 'dev'}
+  endpointType: REGIONAL
+  logRetentionInDays: ${opt:logRetentionInDays, 3}
+  environment: ${file(serverless/config.yml):environment}
+  iam:
+    role: ${file(serverless/iam.yml):role}
+  httpApi:
+    cors: true
+    metrics: true
+    # No authorizers: this BFF is entirely public.
+
+params: ${file(serverless/config.yml):params}
+custom: ${file(serverless/config.yml):custom}
+
+build:
+  esbuild:
+    bundle: true
+    minify: false
+    target: 'node20'
+    sourcemap:
+      type: linked
+      setNodeOptions: true
+    external:
+      - '@aws-sdk/*'
+
+package:
+  individually: true
+  patterns:
+    - '!node_modules/**'
+    - '!src/**'
+    - '!.git/**'
+
+functions:
+  # GET /p/{pasteId} — fetch the raw paste body.
+  # Returns 200 with the body and the original content-type. Reads the
+  # metadata from the lean ReadsTable (GetItem) and the body from
+  # author-bff's content bucket (S3 GetObject, cross-stack).
+  getPaste:
+    handler: src/rest/handlers.getPaste
+    memorySize: 256
+    timeout: 5
+    events:
+      - httpApi:
+          path: /p/{pasteId}
+          method: get
+    environment: ${file(serverless/config.yml):restEnvironment}
+
+  # GET /p/{pasteId}/meta — fetch metadata only, no S3 call.
+  getPasteMeta:
+    handler: src/rest/handlers.getPasteMeta
+    memorySize: 256
+    timeout: 5
+    events:
+      - httpApi:
+          path: /p/{pasteId}/meta
+          method: get
+    environment: ${file(serverless/config.yml):restEnvironment}
+
+  # GET /health — public health check.
+  health:
+    handler: src/rest/handlers.health
+    memorySize: 128
+    timeout: 5
+    events:
+      - httpApi:
+          path: /health
+          method: get
+    environment: ${file(serverless/config.yml):restEnvironment}
+
+  # Listener — consumes PasteCreated/PasteDeleted from bus ->
+  # ReadsListenerQueue, upserts/deletes the lean ReadsTable row.
+  # Wired via the EventSourceMapping resource in resources.yml.
+  listener:
+    handler: src/listener.handle
+    memorySize: 256
+    timeout: 60
+    events:
+      - sqs:
+          arn:
+            Fn::GetAtt: [ReadsListenerQueue, Arn]
+          batchSize: 10
+          functionResponseType: ReportBatchItemFailures
+    environment: ${file(serverless/config.yml):listenerEnvironment}
+
+resources: ${file(serverless/resources.yml):resources}

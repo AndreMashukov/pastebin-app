@@ -1,0 +1,39 @@
+params:
+  dev:
+    debug: '*'
+    account: dev
+    logRetentionInDays: 3
+
+custom:
+  partition: aws
+  org: mashukov
+  subsys: pastebin
+  # Cross-stack refs.
+  #   busName / busArn  — from pastebin-event-hub (CFN output busName/busArn)
+  #   contentBucketName / contentBucketArn — from pastebin-author-bff
+  #     (CFN output ContentBucketName/ContentBucketArn).
+  # We don't read author-bff's PastesTable here — the bus is the
+  # integration channel. The listener is the only consumer of
+  # PasteCreated/PasteDeleted.
+  #
+  # The fallback strings let `sls package` run before the upstream
+  # stacks are deployed (L2 build verification). At deploy time
+  # Serverless re-resolves the cross-stack var; if the upstream stack
+  # is missing, deploy fails loudly with a clear "Cannot resolve
+  # ${cf:...}" error rather than a CFN synthesize error.
+  busName: ${cf:pastebin-event-hub-${opt:stage}.busName, 'pastebin-event-hub-${opt:stage}-bus'}
+  busArn: ${cf:pastebin-event-hub-${opt:stage}.busArn, 'arn:${self:custom.partition}:events:${opt:region}:${aws:accountId}:event-bus/pastebin-event-hub-${opt:stage}-bus'}
+  contentBucketName: ${cf:pastebin-author-bff-${opt:stage}.ContentBucketName, 'pastebin-author-bff-${opt:stage}-content'}
+  contentBucketArn: ${cf:pastebin-author-bff-${opt:stage}.ContentBucketArn, 'arn:${self:custom.partition}:s3:::pastebin-author-bff-${opt:stage}-content'}
+
+environment:
+  SERVICE: ${self:service}
+  STAGE: ${opt:stage}
+  AWS_NODEJS_CONNECTION_REUSE_ENABLED: 1
+
+restEnvironment:
+  TABLE_NAME: ${self:service}-${opt:stage}-reads
+  CONTENT_BUCKET: ${self:custom.contentBucketName}
+
+listenerEnvironment:
+  TABLE_NAME: ${self:service}-${opt:stage}-reads

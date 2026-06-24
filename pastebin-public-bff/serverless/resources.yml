@@ -1,0 +1,114 @@
+resources:
+  Resources:
+    # --- DDB reads table (lean materialized view) ---
+    # Single-row design: one item per pasteId. pk = "<pasteId>" (HASH
+    # only, no range key). No GSI needed (GetItem by pasteId is the
+    # only access pattern). No stream: we don't publish changes from
+    # this stack; the bus is the integration channel.
+    #
+    # PointInTimeRecovery is on so an ops accident on the lean view
+    # can be rolled back; the source of truth is the bus + author-bff
+    # PastesTable, and a future operational tool can re-materialize.
+    ReadsTable:
+      Type: AWS::DynamoDB::Table
+      DeletionPolicy: Retain
+      UpdateReplacePolicy: Retain
+      Properties:
+        TableName: ${self:service}-${opt:stage}-reads
+        AttributeDefinitions:
+          - AttributeName: pk
+            AttributeType: S
+        KeySchema:
+          - AttributeName: pk
+            KeyType: HASH
+        BillingMode: PAY_PER_REQUEST
+        PointInTimeRecoverySpecification:
+          PointInTimeRecoveryEnabled: true
+
+    # --- SQS queue + DLQ for the listener ---
+    # EventBridge rule below feeds the queue. The listener lambda
+    # consumes from the queue and is the source of the ESM (sqs event).
+    ReadsDLQ:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: ${self:service}-${opt:stage}-dlq
+        MessageRetentionPeriod: 1209600  # 14 days
+        VisibilityTimeout: 120
+
+    ReadsListenerQueue:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: ${self:service}-${opt:stage}-listener-queue
+        MessageRetentionPeriod: 345600  # 4 days
+        VisibilityTimeout: 90
+        RedrivePolicy:
+          deadLetterTargetArn:
+            Fn::GetAtt: [ReadsDLQ, Arn]
+          maxReceiveCount: 5
+
+    # --- EventBridge rule: bus -> listener queue ---
+    # Source = author-bff's trigger output (pastebin.author).
+    # Detail-type filter: PasteCreated (upsert) AND PasteDeleted
+    # (delete). No MODIFY at MVP. Both events share the same listener
+    # because the row shape is identical and the dispatch is one
+    # switch on detail-type.
+    ReadsListenerRule:
+      Type: AWS::Events::Rule
+      Properties:
+        Name: ${self:service}-${opt:stage}-paste-events
+        EventBusName: ${self:custom.busName}
+        Description: Route PasteCreated and PasteDeleted events from author-bff to public-bff listener queue
+        State: ENABLED
+        EventPattern:
+          source: ["pastebin.author"]
+          detail-type: ["PasteCreated", "PasteDeleted"]
+        Targets:
+          - Id: ReadsListenerQueueTarget
+            Arn:
+              Fn::GetAtt: [ReadsListenerQueue, Arn]
+
+    # SQS needs an explicit resource policy to allow EventBridge to
+    # send messages to it. Without this the rule is created but
+    # messages never land in the queue.
+    ReadsListenerQueuePolicy:
+      Type: AWS::SQS::QueuePolicy
+      Properties:
+        Queues:
+          - Ref: ReadsListenerQueue
+        PolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service: events.amazonaws.com
+              Action: sqs:SendMessage
+              Resource:
+                Fn::GetAtt: [ReadsListenerQueue, Arn]
+              Condition:
+                ArnEquals:
+                  aws:SourceArn:
+                    Fn::GetAtt: [ReadsListenerRule, Arn]
+
+  Outputs:
+    ReadsTableName:
+      Value:
+        Ref: ReadsTable
+    ReadsTableArn:
+      Value:
+        Fn::GetAtt: [ReadsTable, Arn]
+    ContentBucketName:
+      Value: ${self:custom.contentBucketName}
+    ContentBucketArn:
+      Value: ${self:custom.contentBucketArn}
+    ApiEndpoint:
+      Value:
+        Fn::Sub: 'https://${HttpApi}.execute-api.${opt:region}.amazonaws.com'
+    ListenerQueueUrl:
+      Value:
+        Ref: ReadsListenerQueue
+    ListenerQueueArn:
+      Value:
+        Fn::GetAtt: [ReadsListenerQueue, Arn]
+    DLQArn:
+      Value:
+        Fn::GetAtt: [ReadsDLQ, Arn]

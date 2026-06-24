@@ -1,0 +1,12 @@
+params:
+  default:
+    logRetentionInDays: 3
+  prd:
+    logRetentionInDays: 30
+
+custom:
+  partition: aws
+  org: mashukov
+  subsys: pastebin
+  role: event-hub
+  # global: ${file(serverless/global.yml):global}

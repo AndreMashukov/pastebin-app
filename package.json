@@ -1,0 +1,48 @@
+{
+  "name": "pastebin-app",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Pastebin App - AWS serverless, event-sourced, CQRS. Four CF stacks on one event bus. Architecture based on 'Software Architecture Patterns for Serverless' (Packt 2023, ISBN 9781800207035). Sibling to ../url-shortener-app.",
+  "license": "UNLICENSED",
+  "workspaces": [
+    "pastebin-event-hub",
+    "pastebin-author-bff",
+    "pastebin-public-bff",
+    "pastebin-reaper",
+    "libs/*"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "nx": "NX_SKIP_NATIVE_FILE_CACHE=true nx",
+    "start": "NX_SKIP_NATIVE_FILE_CACHE=true nx run-many --target=serve",
+    "build": "NX_SKIP_NATIVE_FILE_CACHE=true nx run-many --target=build",
+    "test": "NX_SKIP_NATIVE_FILE_CACHE=true nx run-many --target=test",
+    "typecheck": "NX_SKIP_NATIVE_FILE_CACHE=true nx run-many --target=typecheck",
+    "package": "NX_SKIP_NATIVE_FILE_CACHE=true nx run-many --target=package",
+    "deploy": "NX_SKIP_NATIVE_FILE_CACHE=true nx run-many --target=deploy",
+    "info": "NX_SKIP_NATIVE_FILE_CACHE=true nx run-many --target=info",
+    "show:projects": "NX_SKIP_NATIVE_FILE_CACHE=true nx show projects",
+    "graph": "NX_SKIP_NATIVE_FILE_CACHE=true nx graph",
+    "package:event-hub": "NX_SKIP_NATIVE_FILE_CACHE=true nx run pastebin-event-hub:package",
+    "deploy:event-hub": "NX_SKIP_NATIVE_FILE_CACHE=true nx run pastebin-event-hub:deploy",
+    "package:author-bff": "NX_SKIP_NATIVE_FILE_CACHE=true nx run pastebin-author-bff:package",
+    "deploy:author-bff": "NX_SKIP_NATIVE_FILE_CACHE=true nx run pastebin-author-bff:deploy",
+    "package:public-bff": "NX_SKIP_NATIVE_FILE_CACHE=true nx run pastebin-public-bff:package",
+    "deploy:public-bff": "NX_SKIP_NATIVE_FILE_CACHE=true nx run pastebin-public-bff:deploy",
+    "package:reaper": "NX_SKIP_NATIVE_FILE_CACHE=true nx run pastebin-reaper:package",
+    "deploy:reaper": "NX_SKIP_NATIVE_FILE_CACHE=true nx run pastebin-reaper:deploy"
+  },
+  "devDependencies": {
+    "@nx/eslint": "22.6.5",
+    "@nx/eslint-plugin": "22.6.5",
+    "@nx/js": "22.6.5",
+    "@nx/workspace": "22.6.5",
+    "@types/node": "^20.0.0",
+    "eslint": "^9.8.0",
+    "jiti": "2.4.2",
+    "nx": "22.6.5",
+    "typescript": "~5.7.3"
+  }
+}

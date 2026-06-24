@@ -1,0 +1,16 @@
+# IAM for the listener SQS -> Lambda integration. The SQS read is
+# auto-granted by the AWS::Events::Rule / AWS::SQS::QueuePolicy below
+# (which authorizes events.amazonaws.com to send to the queue). The
+# Lambda's SQS receive/delete permissions come from the event source
+# mapping itself, but we add an explicit ReceiveMessage / DeleteMessage
+# statement here for clarity and to make the dependency on the queue
+# ARN visible at the IAM diff level.
+
+iamRoleStatements:
+  Effect: Allow
+  Action:
+    - sqs:ReceiveMessage
+    - sqs:DeleteMessage
+    - sqs:GetQueueAttributes
+  Resource:
+    - Fn::GetAtt: [ReadsListenerQueue, Arn]

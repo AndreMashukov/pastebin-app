@@ -1,0 +1,12 @@
+# IAM for the lean reads table. Used by both the read handlers
+# (GetItem) and the listener (PutItem on PasteCreated, DeleteItem on
+# PasteDeleted). The shared role covers both.
+
+iamRoleStatements:
+  Effect: Allow
+  Action:
+    - dynamodb:GetItem
+    - dynamodb:PutItem
+    - dynamodb:DeleteItem
+  Resource:
+    - Fn::GetAtt: [ReadsTable, Arn]

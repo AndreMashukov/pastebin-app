@@ -1,0 +1,25 @@
+# IAM for cross-stack S3 GetObject on author-bff's content bucket.
+# The bucket name and ARN are resolved at deploy time from
+# pastebin-author-bff's CFN outputs (ContentBucketName /
+# ContentBucketArn) via the ${cf:..., 'fallback'} placeholders in
+# config.yml.
+#
+# Read-only: the public-bff never writes to or deletes from this
+# bucket. Author-bff owns the bucket; pastebin-reaper owns its
+# lifecycle (design §5).
+#
+# We allow GetObject on the bucket ARN and on the pastes/* prefix
+# explicitly (the second resource is the typical S3 IAM pattern:
+# list-objects is on the bucket, get-object is on a key prefix).
+# We omit ListBucket to keep the public surface minimal.
+
+iamRoleStatements:
+  Effect: Allow
+  Action:
+    - s3:GetObject
+    - s3:GetObjectVersion
+  Resource:
+    - Fn::Join:
+        - '/'
+        - - ${self:custom.contentBucketArn}
+          - 'pastes/*'

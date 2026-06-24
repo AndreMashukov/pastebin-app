@@ -1,0 +1,26 @@
+# IAM for cross-stack DynamoDB access on author-bff's PastesTable.
+# The reaper needs:
+#   - Query on GSI2 to find expired pastes (one paginated query per
+#     cycle, sorted by gsi2sk ascending so we see oldest-first)
+#   - DeleteItem to actually reap the row (REMOVE in the DDB stream
+#     is what causes author-bff's trigger to publish PasteDeleted
+#     transitively)
+#
+# We do NOT need GetItem: GSI2 KEYS_ONLY projection returns pk+sk,
+# and we already know the S3 key from pasteId. The DDB delete uses
+# the same pk/sk (always `PASTE#<pasteId>` / `META`).
+#
+# Cross-stack via ${cf:...} placeholders resolved at deploy time.
+#
+# Two statements, split into two files (dynamodb-query.yml +
+# dynamodb-delete.yml) to match the one-statement-per-file
+# convention used by pastebin-public-bff. The aggregator in
+# iam.yml concatenates them into the provider.iam.role.statements
+# array.
+
+iamRoleStatements:
+  Effect: Allow
+  Action:
+    - dynamodb:Query
+  Resource:
+    - ${self:custom.pastesTableGsi2Arn}
