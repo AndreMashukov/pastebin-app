@@ -36,11 +36,3 @@ environment:
   PASTES_TABLE_NAME: ${self:custom.pastesTableName}
   CONTENT_BUCKET_NAME: ${self:custom.contentBucketName}
   GSI2_NAME: gsi2
-
-reaperEnvironment:
-  AWS_NODEJS_CONNECTION_REUSE_ENABLED: "1"
-  LOG_LEVEL: info
-  SERVICE_NAME: pastebin-reaper
-  PASTES_TABLE_NAME: ${self:custom.pastesTableName}
-  CONTENT_BUCKET_NAME: ${self:custom.contentBucketName}
-  GSI2_NAME: gsi2

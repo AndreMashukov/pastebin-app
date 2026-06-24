@@ -44,9 +44,5 @@
     "jiti": "2.4.2",
     "nx": "22.6.5",
     "typescript": "~5.7.3"
-  },
-  "dependencies": {
-    "@aws-sdk/client-cloudwatch-logs": "^3.1074.0",
-    "@aws-sdk/client-cognito-identity-provider": "^3.1074.0"
   }
 }

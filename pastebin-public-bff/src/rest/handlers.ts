@@ -153,7 +153,14 @@ export const getPaste: APIGatewayProxyHandlerV2 = async (event) => {
         Key: `pastes/${pasteId}`,
       }),
     );
-    body = await out.Body!.transformToString();
+    if (!out.Body) {
+      console.error("getPaste: S3 GetObject returned no Body", {
+        pasteId,
+        bucket: CONTENT_BUCKET,
+      });
+      return err(500, "internal_error", "failed to fetch paste body");
+    }
+    body = await out.Body.transformToString();
   } catch (e) {
     console.error("getPaste: S3 GetObject failed", {
       pasteId,

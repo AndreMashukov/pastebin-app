@@ -79,6 +79,5 @@ functions:
           description: Sweep expired pastes (GSI2 of author-bff PastesTable), delete S3 body and DDB row.
           rate: rate(5 minutes)
           enabled: true
-    environment: ${file(serverless/config.yml):reaperEnvironment}
 
 resources: ${file(serverless/resources.yml):resources}
